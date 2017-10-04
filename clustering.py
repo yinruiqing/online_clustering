@@ -1,6 +1,7 @@
 import numpy as np
 from pyannote.core import Annotation,Segment, Timeline
 from pyannote.audio.embedding.utils import cdist
+from itertools import combinations
 
 class Cluster():
     def __init__(self, label, dist_metric=cdist):
@@ -162,3 +163,90 @@ class OnlineOracleClustering():
         if len(self.clusters)==0:
             return True
         return False
+    
+class HierarchicalClustering():
+    def __init__(self, uri, stop_threshold=0.5,
+                generator_method='int',
+                dist_metric=cdist):
+        #pooling_func, distance, 
+        self.uri = uri
+        self.clusters = []
+        self.tree = []
+        self.generator_method = generator_method
+        self.stop_threshold = stop_threshold
+        self.dist_metric = cdist
+        #self.annotations = Annotation(uri=self.uri)
+
+        if self.generator_method == 'string':
+            from pyannote.core.util import string_generator
+            self.generator = string_generator()
+        elif self.generator_method == 'int':
+            from pyannote.core.util import int_generator
+            self.generator = int_generator()
+
+    
+    def getLabels(self):
+        """
+        return all the cluster labels
+        """
+        return [cluster.label for cluster in self.clusters]
+    
+    def getAnnotations(self):
+        """
+        return annotations of cluster result
+        todo: add warning when clusters is empty
+        """
+        annotation = Annotation(uri=self.uri, modality='speaker')
+        for cluster in self.clusters:
+            for seg in cluster.segments:
+                annotation[seg] = cluster.label
+        
+        return annotation
+    
+    def addCluster(self,data):
+        label = next(self.generator)
+        cluster = Cluster(label)
+        cluster.updateCluster(data)
+        self.clusters.append(cluster)
+        return
+        
+    def computeDistances(self, data):
+        """Compare new coming data with clusters"""
+        return [cluster.distance(data) for cluster in self.clusters]
+        
+
+    def mergeClusters(self, cluster1, cluster2):
+        label = next(self.generator)
+        cluster = Cluster(label)
+        cluster.representation = cluster1.representation + cluster2.representation
+        cluster.embeddings = cluster1.embeddings + cluster2.embeddings
+        cluster.segments = cluster1.segments + cluster2.segments
+        return cluster
+
+    def distance(self, cluster1, cluster2):
+        return self.dist_metric(cluster1.representation, 
+            cluster2.representation, metric='cosine')
+
+    def fit(self, X):
+        for embedding, segment in X:
+            data = {}
+            data['embedding'] = embedding
+            data['segment'] = segment
+            self.addCluster(data)
+        for cluster in self.clusters:
+            self.tree.append((-1,-1,cluster.label))
+        clustersOut = []
+        min_distance = 0
+        while len(self.clusters) > 1 and min_distance < self.stop_threshold:
+            # calculating distances
+            distances = [(self.distance(i, j),(i,j)) for i, j in combinations(self.clusters,2)]
+            # merge closest clusters
+            min_distance = min(distances)[0]
+            i,j = min(distances)[1]
+            self.clusters.remove(i)
+            self.clusters.remove(j)
+            new_cluster = self.mergeClusters(i,j)
+            self.clusters.append(new_cluster)
+            self.tree.append((i.label,j.label,new_cluster.label))
+            self.min_dist = min_distance
+        return

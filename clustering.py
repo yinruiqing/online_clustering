@@ -13,10 +13,10 @@ class Cluster():
         
     def distance(self,data):
         feature = np.sum(data['embedding'], axis=0, keepdims=True)
-        return self.dist_metric(self.representation, feature, metric='cosine')
+        return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
 
     def distanceModel(self,model):
-        return self.dist_metric(self.representation, model, metric='cosine')
+        return self.dist_metric(self.representation, model, metric='cosine')[0, 0]
     
     def updateCluster(self,data):
         self.embeddings.append(data['embedding'])
@@ -93,6 +93,11 @@ class OnlineClustering():
             to_update_cluster = self.clusters[indice]
             to_update_cluster.updateCluster(data)
         return
+
+    def empty(self):
+        if len(self.clusters)==0:
+            return True
+        return False
 
 
 
@@ -234,7 +239,7 @@ class HierarchicalClustering():
             data['segment'] = segment
             self.addCluster(data)
         for cluster in self.clusters:
-            self.tree.append((-1,-1,cluster.label))
+            self.tree.append((-1,-1,cluster.label,0))
         clustersOut = []
         min_distance = 0
         while len(self.clusters) > 1 and min_distance < self.stop_threshold:
@@ -247,6 +252,6 @@ class HierarchicalClustering():
             self.clusters.remove(j)
             new_cluster = self.mergeClusters(i,j)
             self.clusters.append(new_cluster)
-            self.tree.append((i.label,j.label,new_cluster.label))
+            self.tree.append((i.label,j.label,new_cluster.label,min_distance))
             self.min_dist = min_distance
         return

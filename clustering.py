@@ -5,41 +5,93 @@ from itertools import combinations
 
 class Cluster():
     def __init__(self, label, dist_metric=cdist):
-        self.label = label
-        self.representation = 0
-        self.dist_metric = cdist
-        self.embeddings = []
-        self.segments = []
+        """ Cluster class 
+        It is used to segments clustering. 
+        
+        Parameters
+        ----------
+        label: string
+            name of cluster
+        dist_metric: optional
+            distance metric to compute distance
+            between clusters and models 
+
+        """
+        self.label = label       # cluster name
+        self.representation = 0  # cluster embedding
+        self.dist_metric = cdist # distance metric
+        self.embeddings = []     # embedding of segments in this cluster
+        self.segments = []       # segements in this cluster
         
     def distance(self,data):
+        """ 
+        compute the distance between cluster 
+        and segment
+
+        Parameters
+        ----------
+        data: dict
+            example:
+                { 'embedding': np.array(...),
+                  'segment': Segment(10, 20) }
+        """
         feature = np.sum(data['embedding'], axis=0, keepdims=True)
         return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
 
     def distanceModel(self,model):
+        """
+        compute distance between cluster and model
+        """
         return self.dist_metric(self.representation, model, metric='cosine')[0, 0]
     
     def updateCluster(self,data):
+        """
+        update the cluster:
+            add new segment embedding
+            update the cluster embedding
+            add segment to cluster 
+        """
         self.embeddings.append(data['embedding'])
         self.representation += np.sum(data['embedding'], axis=0, keepdims=True)
         self.segments.append(data['segment'])
         return
     
     def mergeClusters(self,cluster):
+        """
+        update the cluster by another cluster
+        """
         self.embeddings.update(cluster.embeddings)
         self.segments.update(cluster.segments)
         return
 
 
 class OnlineClustering():
+    """ online clustering class
+    compare new comming segment with clusters, then decide 
+    create a new cluster, or add it to a existing cluster. 
+    When the distance between the new coming segment and 
+    clusters is larger than a predetermined threshold
+    then it will be added to the closest cluster. Otherwise,
+    add a new cluster
+
+    Parameters
+    ----------
+    uri: name
+    threshold: float, optional
+        distance threhold, when the distance exceding 
+        the threshold, a new cluster created
+    generator_method: str, optional 
+        generator of names
+        value should be "string" or "int"
+
+    """
     def __init__(self, uri, threshold=0.5,
                 generator_method='string'):
-        #pooling_func, distance, 
-        self.uri = uri
+        self.uri = uri   
         self.threshold = threshold
-        # store clusters by dict next
-        self.clusters = []
+        #store the current clusters
+        self.clusters = []          
         self.generator_method = generator_method
-        #self.annotations = Annotation(uri=self.uri)
         
         if self.generator_method == 'string':
             from pyannote.core.util import string_generator
@@ -51,7 +103,7 @@ class OnlineClustering():
     
     def getLabels(self):
         """
-        return all the cluster labels
+        returns all the cluster labels
         """
         return [cluster.label for cluster in self.clusters]
     
@@ -68,6 +120,9 @@ class OnlineClustering():
         return annotation
     
     def addCluster(self,data):
+        """
+        create a new cluster
+        """
         label = next(self.generator)
         cluster = Cluster(label)
         cluster.updateCluster(data)
@@ -80,7 +135,11 @@ class OnlineClustering():
         
     
     def upadateCluster(self,data):
-        """add new coming data to clustering result"""
+        """add new coming data to clustering result
+        If the distance between data and clusters are smaller 
+        than the threshold, add the data to the 
+        closest cluster. Otherwise, create a new cluster
+        """
         if len(self.clusters) == 0:
             self.addCluster(data)
             return
@@ -102,23 +161,41 @@ class OnlineClustering():
 
 
 class OnlineOracleClustering():
-    def __init__(self, uri, threshold=0.5,
-                generator_method='string'):
-        #pooling_func, distance, 
+    """ online oracle clustering 
+    All segments have been clustered
+    It will compute the cluster embedding online
+
+    Parameters
+    ----------
+    uri: name
+
+    """
+
+    def __init__(self, uri):
+
         self.uri = uri
         self.clusters = {}
-        #self.annotations = Annotation(uri=self.uri)
     
     def getLabels(self):
         """
         return all the cluster labels
+
+        Returns:
+        --------
+        labels: list of str
+
         """
         return cluster.keys()
     
     def getAnnotations(self):
         """
-        return annotations of cluster result
-        todo: add warning when clusters is empty
+        annotations of cluster result
+        Returns:
+        --------
+        annotation: pyannote.core.Annotation
+
+        todo: 
+        add warning when clusters is empty
         """
         annotation = Annotation(uri=self.uri, modality='speaker')
         for cluster in self.clusters:
@@ -128,6 +205,9 @@ class OnlineOracleClustering():
         return annotation
     
     def addCluster(self,data):
+        """
+        create a new cluster
+        """
         label = data['label']
         cluster = Cluster(label)
         cluster.updateCluster(data)
@@ -135,20 +215,41 @@ class OnlineOracleClustering():
         return
         
     def computeDistances(self, data):
-        """Compare new coming data with clusters"""
+        """Compare new coming data with clusters
+
+        Returns:
+        --------
+        distances: list of float
+
+        """
         distances = []
         for label in self.clusters:
             distances.append(self.clusters[label].distance(data))
         return distances
 
     def modelDistance(self, model):
+        """Compare model with clusters
+
+        Returns:
+        --------
+        distances: list of float
+
+        """
         distances = []
         for label in self.clusters:
             distances.append(self.clusters[label].distanceModel(model))
         return distances
     
     def modelsDistances(self, models):
+        """Compare all models with clusters
 
+        Returns:
+        --------
+        distances: dict
+            key: cluster label
+            value: min distance with clusters
+
+        """
         distances = {}
         for label, model in models.items():
             distances[label] = min(self.modelDistance(model))
@@ -157,7 +258,10 @@ class OnlineOracleClustering():
 
     
     def upadateCluster(self,data):
-        """add new coming data to clustering result"""
+        """add new coming data to clustering result
+        If the cluster is existed, add the data to the 
+        corresponding cluster. Otherwise, create a new cluster
+        """
         if data['label'] in self.clusters:
             self.clusters[data['label']].updateCluster(data)
         else:
@@ -173,7 +277,27 @@ class HierarchicalClustering():
     def __init__(self, uri, stop_threshold=0.5,
                 generator_method='int',
                 dist_metric=cdist):
-        #pooling_func, distance, 
+        """ Hierarchical Clustering
+        Each observation starts in its own cluster, and pairs of clusters 
+        with minimum distance are merged as one moves up the hierarchy.
+        This process stop when the minimum distance larger than a predetemined 
+        threshold 
+
+        Parameters
+        ----------
+        uri: string
+            name of cluster
+        stop_threshold: float
+            stop the clustering when the min distance is 
+            larger than stop_threshold
+        generator_method: str, optional 
+            generator of names
+            value should be "string" or "int"
+        dist_metric: optional
+            distance metric to compute distance
+            between clusters and models 
+
+        """
         self.uri = uri
         self.clusters = []
         self.tree = []
@@ -193,13 +317,23 @@ class HierarchicalClustering():
     def getLabels(self):
         """
         return all the cluster labels
+
+        Returns:
+        --------
+        labels: list of str
+
         """
         return [cluster.label for cluster in self.clusters]
     
     def getAnnotations(self):
         """
-        return annotations of cluster result
-        todo: add warning when clusters is empty
+        annotations of cluster result
+        Returns:
+        --------
+        annotation: pyannote.core.Annotation
+
+        todo: 
+        add warning when clusters is empty
         """
         annotation = Annotation(uri=self.uri, modality='speaker')
         for cluster in self.clusters:
@@ -209,6 +343,7 @@ class HierarchicalClustering():
         return annotation
     
     def addCluster(self,data):
+        """ add new cluster """
         label = next(self.generator)
         cluster = Cluster(label)
         cluster.updateCluster(data)
@@ -221,6 +356,17 @@ class HierarchicalClustering():
         
 
     def mergeClusters(self, cluster1, cluster2):
+        """ merge two clusters 
+
+        Parameter:
+        --------
+        cluster1: clustering.Cluster
+        cluster2: clustering.Cluster
+
+        Returns:
+        --------
+        cluster: clustering.Cluster
+        """
         label = next(self.generator)
         cluster = Cluster(label)
         cluster.representation = cluster1.representation + cluster2.representation
@@ -229,10 +375,32 @@ class HierarchicalClustering():
         return cluster
 
     def distance(self, cluster1, cluster2):
+        """ compute distance between two clusters
+
+        Parameter:
+        --------
+        cluster1: clustering.Cluster
+        cluster2: clustering.Cluster
+
+        Returns:
+        --------
+        distance: float     
+
+        """
         return self.dist_metric(cluster1.representation, 
             cluster2.representation, metric='cosine')
 
     def fit(self, X):
+        """
+        Fit the model according to the given training data.
+
+        Parameters
+        ----------
+        X: tuple (ebmedding, segment) list
+            embedding: array-like
+            segment: pyannote.core.Segment
+
+        """
         for embedding, segment in X:
             data = {}
             data['embedding'] = embedding

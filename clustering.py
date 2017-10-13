@@ -7,7 +7,7 @@ class Cluster():
     def __init__(self, label, dist_metric=cdist):
         """ Cluster class 
         It is used to segments clustering. 
-        
+
         Parameters
         ----------
         label: string
@@ -38,11 +38,17 @@ class Cluster():
         feature = np.sum(data['embedding'], axis=0, keepdims=True)
         return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
 
-    def distanceModel(self,model):
-        """
-        compute distance between cluster and model
-        """
-        return self.dist_metric(self.representation, model, metric='cosine')[0, 0]
+    def distanceModel(self, model):
+        embeddings = np.concatenate(self.embeddings, axis=0)
+        return np.mean([self.dist_metric(embedding, model) for embedding in embeddings])
+
+
+
+    # def distanceModel(self,model):
+    #     """
+    #     compute distance between cluster and model
+    #     """
+    #     return self.dist_metric(self.representation, model, metric='cosine')[0, 0]
     
     def updateCluster(self,data):
         """

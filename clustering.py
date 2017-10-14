@@ -40,7 +40,10 @@ class Cluster():
 
     def distanceModel(self, model):
         embeddings = np.concatenate(self.embeddings, axis=0)
-        return np.mean([self.dist_metric(embedding, model) for embedding in embeddings])
+        dists = []
+        for embedding in self.embeddings:
+            dists += list(self.dist_metric(embedding, model, metric='cosine').flatten())
+        return np.mean(dists)
 
 
 

@@ -22,7 +22,8 @@ class Cluster():
         self.dist_metric = cdist # distance metric
         self.embeddings = []     # embedding of segments in this cluster
         self.segments = []       # segements in this cluster
-        
+        self.distances = {}
+
     def distance(self,data):
         """ 
         compute the distance between cluster 
@@ -36,13 +37,35 @@ class Cluster():
                   'segment': Segment(10, 20) }
         """
         feature = np.sum(data['embedding'], axis=0, keepdims=True)
-        return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
+
+        dists = []
+        for embedding in self.embeddings:
+            dists += list(self.dist_metric(embedding, feature, metric='cosine').flatten())
+        return np.mean(dists)
+        
+    # def distance(self,data):
+    #     """ 
+    #     compute the distance between cluster 
+    #     and segment
+
+    #     Parameters
+    #     ----------
+    #     data: dict
+    #         example:
+    #             { 'embedding': np.array(...),
+    #               'segment': Segment(10, 20) }
+    #     """
+    #     feature = np.sum(data['embedding'], axis=0, keepdims=True)
+    #     return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
 
     def distanceModel(self, model):
+        if model['mid'] in self.distances:
+            return np.mean(self.distances['mid'])
+
         embeddings = np.concatenate(self.embeddings, axis=0)
         dists = []
         for embedding in self.embeddings:
-            dists += list(self.dist_metric(embedding, model, metric='cosine').flatten())
+            dists += list(self.dist_metric(embedding, model['embedding'], metric='cosine').flatten())
         return np.mean(dists)
 
 
@@ -63,6 +86,11 @@ class Cluster():
         self.embeddings.append(data['embedding'])
         self.representation += np.sum(data['embedding'], axis=0, keepdims=True)
         self.segments.append(data['segment'])
+        if 'distances' in data:
+            for mid in data['distances']:
+                if mid not in self.distances:
+                    self.distances[mid] = []
+                self.distances[mid] += data['distances'][mid]
         return
     
     def mergeClusters(self,cluster):

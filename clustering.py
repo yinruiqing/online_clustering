@@ -1,7 +1,9 @@
 import numpy as np
 from pyannote.core import Annotation,Segment, Timeline
 from pyannote.audio.embedding.utils import cdist
+import itertools
 from itertools import combinations
+
 
 class Cluster():
     def __init__(self, label, dist_metric=cdist):
@@ -21,6 +23,7 @@ class Cluster():
         self.representation = 0  # cluster embedding
         self.dist_metric = cdist # distance metric
         self.embeddings = []     # embedding of segments in this cluster
+        self.indices = []
         self.segments = []       # segements in this cluster
         self.distances = {}
 
@@ -60,7 +63,7 @@ class Cluster():
 
     def distanceModel(self, model):
         if model['mid'] in self.distances:
-            return np.mean(self.distances['mid'])
+            return np.mean(self.distances[model['mid']])
 
         embeddings = np.concatenate(self.embeddings, axis=0)
         dists = []
@@ -86,6 +89,7 @@ class Cluster():
         self.embeddings.append(data['embedding'])
         self.representation += np.sum(data['embedding'], axis=0, keepdims=True)
         self.segments.append(data['segment'])
+        self.indices += (data['indice'])
         if 'distances' in data:
             for mid in data['distances']:
                 if mid not in self.distances:
@@ -122,10 +126,12 @@ class OnlineClustering():
         value should be "string" or "int"
 
     """
-    def __init__(self, uri, threshold=0.5,
+    def __init__(self, uri, distance_matrix,
+                 threshold=0.5, 
                 generator_method='string'):
         self.uri = uri   
         self.threshold = threshold
+        self.distance_matrix = distance_matrix
         #store the current clusters
         self.clusters = []          
         self.generator_method = generator_method
@@ -168,7 +174,14 @@ class OnlineClustering():
         
     def computeDistances(self, data):
         """Compare new coming data with clusters"""
-        return [cluster.distance(data) for cluster in self.clusters]
+        # return [cluster.distance(data) for cluster in self.clusters]
+        distances = []
+        for cluster in self.clusters:
+            i = cluster.indices
+            j = data['indice']
+            indexs = list(itertools.product(i,j))
+            distances.append(np.mean([self.distance_matrix[i] for i in indexs]))
+        return distances
         
     
     def upadateCluster(self,data):
@@ -189,6 +202,19 @@ class OnlineClustering():
             to_update_cluster = self.clusters[indice]
             to_update_cluster.updateCluster(data)
         return
+    
+    def modelDistance(self, model):
+        """Compare model with clusters
+
+        Returns:
+        --------
+        distances: list of float
+
+        """
+        distances = []
+        for cluster in self.clusters:
+            distances.append(cluster.distanceModel(model))
+        return distances
 
     def empty(self):
         if len(self.clusters)==0:

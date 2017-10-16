@@ -62,6 +62,20 @@ class Cluster():
     #     return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
 
     def distanceModel(self, model):
+        """ 
+        compute the distance between cluster 
+        and model
+
+        Parameters
+        ----------
+        model: dict
+            example:
+                { 'mid': str,
+                  'embedding': np.array }
+        """
+        # if distance between model and embedding are stored
+        # in cluster.distance, than return the average of distance
+
         if model['mid'] in self.distances:
             return np.mean(self.distances[model['mid']])
 
@@ -85,6 +99,7 @@ class Cluster():
             add new segment embedding
             update the cluster embedding
             add segment to cluster 
+            add distances between model and cluster
         """
         self.embeddings.append(data['embedding'])
         self.representation += np.sum(data['embedding'], axis=0, keepdims=True)
@@ -129,12 +144,12 @@ class OnlineClustering():
     def __init__(self, uri, distance_matrix,
                  threshold=0.5, 
                 generator_method='string'):
-        self.uri = uri   
-        self.threshold = threshold
-        self.distance_matrix = distance_matrix
-        #store the current clusters
-        self.clusters = []          
-        self.generator_method = generator_method
+        self.uri = uri              # cluster name
+        self.threshold = threshold  # threshold to decide add a new cluster or update a existing cluster
+        self.distance_matrix = distance_matrix # distance between embeddings 
+        
+        self.clusters = []          #store the current clusters
+        self.generator_method = generator_method # generate cluster names
         
         if self.generator_method == 'string':
             from pyannote.core.util import string_generator
@@ -261,9 +276,9 @@ class OnlineOracleClustering():
         add warning when clusters is empty
         """
         annotation = Annotation(uri=self.uri, modality='speaker')
-        for cluster in self.clusters:
-            for seg in cluster.segments:
-                annotation[seg] = cluster.label
+        for cluster_id in self.clusters:
+            for seg in self.clusters[cluster_id].segments:
+                annotation[seg] = self.clusters[cluster_id].label
         
         return annotation
     
@@ -277,18 +292,18 @@ class OnlineOracleClustering():
         self.clusters[label] = cluster
         return
         
-    def computeDistances(self, data):
-        """Compare new coming data with clusters
+    # def computeDistances(self, data):
+    #     """Compare new coming data with clusters
 
-        Returns:
-        --------
-        distances: list of float
+    #     Returns:
+    #     --------
+    #     distances: list of float
 
-        """
-        distances = []
-        for label in self.clusters:
-            distances.append(self.clusters[label].distance(data))
-        return distances
+    #     """
+    #     distances = []
+    #     for label in self.clusters:
+    #         distances.append(self.clusters[label].distance(data))
+    #     return distances
 
     def modelDistance(self, model):
         """Compare model with clusters

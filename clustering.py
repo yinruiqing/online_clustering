@@ -46,20 +46,20 @@ class Cluster():
             dists += list(self.dist_metric(embedding, feature, metric='cosine').flatten())
         return np.mean(dists)
         
-    # def distance(self,data):
-    #     """ 
-    #     compute the distance between cluster 
-    #     and segment
+    def distance2(self,data):
+        """ 
+        compute the distance between cluster 
+        and segment
 
-    #     Parameters
-    #     ----------
-    #     data: dict
-    #         example:
-    #             { 'embedding': np.array(...),
-    #               'segment': Segment(10, 20) }
-    #     """
-    #     feature = np.sum(data['embedding'], axis=0, keepdims=True)
-    #     return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
+        Parameters
+        ----------
+        data: dict
+            example:
+                { 'embedding': np.array(...),
+                  'segment': Segment(10, 20) }
+        """
+        feature = np.sum(data['embedding'], axis=0, keepdims=True)
+        return self.dist_metric(self.representation, feature, metric='cosine')[0, 0]
 
     def distanceModel(self, model):
         """ 
@@ -85,6 +85,20 @@ class Cluster():
             dists += list(self.dist_metric(embedding, model['embedding'], metric='cosine').flatten())
         return np.mean(dists)
 
+    def distanceModelCluster(self, model):
+        """ 
+        compute the distance between cluster embedding
+        and model
+
+        Parameters
+        ----------
+        model: dict
+            example:
+                { 'mid': str,
+                  'embedding': np.array }
+        """
+
+        return self.dist_metric(self.representation, model['embedding'], metric='cosine')[0, 0]
 
 
     # def distanceModel(self,model):
@@ -197,6 +211,12 @@ class OnlineClustering():
             indexs = list(itertools.product(i,j))
             distances.append(np.mean([self.distance_matrix[i] for i in indexs]))
         return distances
+
+    def computeDistances2(self, data):
+        """Compare new coming data with clusters"""
+        # return [cluster.distance(data) for cluster in self.clusters]
+        
+        return [cluster.distance2(data) for cluster in self.clusters]
         
     
     def upadateCluster(self,data):
@@ -217,6 +237,25 @@ class OnlineClustering():
             to_update_cluster = self.clusters[indice]
             to_update_cluster.updateCluster(data)
         return
+
+    def upadateCluster2(self,data):
+        """add new coming data to clustering result
+        If the distance between data and clusters are smaller 
+        than the threshold, add the data to the 
+        closest cluster. Otherwise, create a new cluster
+        """
+        if len(self.clusters) == 0:
+            self.addCluster(data)
+            return
+        
+        distances = self.computeDistances2(data)
+        if min(distances) > self.threshold:
+            self.addCluster(data)
+        else:
+            indice = distances.index(min(distances))
+            to_update_cluster = self.clusters[indice]
+            to_update_cluster.updateCluster(data)
+        return
     
     def modelDistance(self, model):
         """Compare model with clusters
@@ -229,6 +268,19 @@ class OnlineClustering():
         distances = []
         for cluster in self.clusters:
             distances.append(cluster.distanceModel(model))
+        return distances
+
+    def modelClusterDistance(self, model):
+        """Compare model with clusters
+
+        Returns:
+        --------
+        distances: list of float
+
+        """
+        distances = []
+        for cluster in self.clusters:
+            distances.append(cluster.distanceModelCluster(model))
         return distances
 
     def empty(self):
@@ -263,7 +315,7 @@ class OnlineOracleClustering():
         labels: list of str
 
         """
-        return cluster.keys()
+        return self.clusters.keys()
     
     def getAnnotations(self):
         """
@@ -316,6 +368,33 @@ class OnlineOracleClustering():
         distances = []
         for label in self.clusters:
             distances.append(self.clusters[label].distanceModel(model))
+        return distances
+
+
+    def modelClusterDistance(self, model):
+        """Compare model with clusters
+
+        Returns:
+        --------
+        distances: list of float
+
+        """
+        distances = []
+        for label in self.clusters:
+            distances.append(self.clusters[label].distanceModelCluster(model))
+        return distances
+
+    def allModelClusterDistance(self, model):
+        """Compare model with clusters
+
+        Returns:
+        --------
+        distances: list of float
+
+        """
+        distances = {}
+        for label in self.clusters:
+            distances[label] = self.clusters[label].distanceModelCluster(model)
         return distances
     
     def modelsDistances(self, models):
